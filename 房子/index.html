@@ -1,0 +1,393 @@
+  <!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>盖房子</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: #87CEEB;
+            font-family: Arial, sans-serif;
+        }
+        canvas {
+            display: block;
+        }
+        
+        /* 控制面板样式 */
+        .controls-panel {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            width: 280px;
+            background: rgba(30, 30, 30, 0.85); /* Slightly adjusted for modern look */
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 14px; /* Slightly larger for readability */
+            max-height: 90vh;
+            overflow-y: auto;
+            z-index: 1000;
+        }
+        
+        .controls-panel h3 {
+            margin: 0 0 15px 0;
+            font-size: 18px; /* Larger title */
+            color: #fff;
+            border-bottom: 1px solid #444;
+            padding-bottom: 8px;
+        }
+        
+        .control-group {
+            margin-bottom: 15px;
+            border-bottom: 1px solid #333;
+            padding-bottom: 10px;
+        }
+        
+        .control-group:last-child {
+            border-bottom: none;
+            margin-bottom: 5px;
+        }
+        
+        .control-group h4 {
+            margin: 0 0 10px 0;
+            font-size: 15px;
+            color: #ccc;
+        }
+        
+        .control-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        
+        .control-item label {
+            flex: 1;
+            color: #ddd;
+            font-size: 13px;
+        }
+        
+        .control-item input[type="range"] {
+            flex: 2;
+            margin: 0 10px;
+        }
+        
+        .control-item input[type="color"] {
+            width: 50px;
+            height: 25px;
+            border: 1px solid #555;
+            border-radius: 4px;
+            cursor: pointer;
+            background-color: transparent;
+        }
+
+        .control-item input[type="text"] {
+             flex: 2;
+             background-color: #555;
+             border: 1px solid #777;
+             color: white;
+             border-radius: 3px;
+             padding: 4px;
+             margin: 0 10px;
+        }
+        
+        .control-item .value-display {
+            width: 45px;
+            text-align: right;
+            color: #fff;
+            font-size: 12px;
+            font-family: 'Courier New', Courier, monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="controls-panel">
+        <div class="control-group">
+             <h3>Controls</h3>
+            <div class="control-item">
+                <label>y</label>
+                <input type="range" id="controlY" min="-20" max="20" value="2" step="0.5">
+                <span class="value-display" id="controlYValue">2.0</span>
+            </div>
+             <div class="control-item">
+                <label>z</label>
+                <input type="range" id="controlZ" min="-20" max="20" value="0" step="0.5">
+                <span class="value-display" id="controlZValue">0.0</span>
+            </div>
+             <div class="control-item">
+                <label>color</label>
+                <input type="color" id="controlColor" value="#ffffff">
+            </div>
+             <div class="control-item">
+                <label>rotateX</label>
+                <input type="range" id="controlRotateX" min="0" max="360" value="0" step="1">
+                <span class="value-display" id="controlRotateXValue">0°</span>
+            </div>
+             <div class="control-item">
+                <label>width</label>
+                <input type="range" id="controlWidth" min="0.5" max="3" value="1" step="0.1">
+                <span class="value-display" id="controlWidthValue">1.0</span>
+            </div>
+        </div>
+
+        <div class="control-group">
+            <h4>雾</h4>
+            <div class="control-item">
+                <label>near</label>
+                <input type="text" id="fogNear" value="1000">
+            </div>
+            <div class="control-item">
+                <label>far</label>
+                <input type="text" id="fogFar" value="40000">
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    
+    <script>
+        // 创建场景、相机和渲染器
+        const scene = new THREE.Scene();
+        // 调整相机远平面以适应雾气效果
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 50000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setClearColor(0x87CEEB);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        document.body.appendChild(renderer.domElement);
+
+        // 添加雾效
+        scene.fog = new THREE.Fog(0x87CEEB, 1000, 40000);
+
+        // 添加轨道控制器
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+
+        // 创建一个组来容纳所有房子组件
+        const houseGroup = new THREE.Group();
+        scene.add(houseGroup);
+
+        // 存储房子组件的引用
+        let houseComponents = {
+            walls: null,
+            roof: null,
+            door: null,
+            chimney: null,
+            ambientLight: null,
+            directionalLight: null
+        };
+
+        // 创建地面
+        const groundGeometry = new THREE.PlaneGeometry(100, 100);
+        const groundMaterial = new THREE.MeshLambertMaterial({ color: 0x228B22 });
+        const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+        ground.rotation.x = -Math.PI / 2;
+        ground.receiveShadow = true;
+        scene.add(ground);
+
+        // 创建石砖纹理
+        function createBrickTexture(baseColor = '#D3D3D3') {
+            const canvas = document.createElement('canvas');
+            canvas.width = 256;
+            canvas.height = 256;
+            const ctx = canvas.getContext('2d');
+            
+            ctx.fillStyle = baseColor;
+            ctx.fillRect(0, 0, 256, 256);
+            
+            const brickWidth = 64;
+            const brickHeight = 32;
+            ctx.strokeStyle = '#A9A9A9';
+            ctx.lineWidth = 2;
+            
+            for (let y = 0; y < 256; y += brickHeight) {
+                for (let x = 0; x < 256; x += brickWidth) {
+                    const offsetX = (y / brickHeight) % 2 === 0 ? 0 : brickWidth / 2;
+                    ctx.strokeRect(x + offsetX, y, brickWidth, brickHeight);
+                }
+            }
+            
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.RepeatWrapping;
+            return texture;
+        }
+
+      // 初始化房子
+function initializeHouse() {
+    // === 墙体 ===
+    const wallGeometry = new THREE.BoxGeometry(6, 4, 6);
+    const brickTexture = createBrickTexture('#f0e6d2'); // 柔和米白色砖纹
+    brickTexture.wrapS = brickTexture.wrapT = THREE.RepeatWrapping;
+    brickTexture.repeat.set(3, 2);
+    const brickBump = brickTexture.clone();
+    const wallMaterial = new THREE.MeshPhongMaterial({
+        map: brickTexture,
+        bumpMap: brickBump,
+        bumpScale: 0.2,
+        shininess: 10,
+    });
+    houseComponents.walls = new THREE.Mesh(wallGeometry, wallMaterial);
+    houseComponents.walls.position.y = 2;
+    houseComponents.walls.castShadow = true;
+    houseGroup.add(houseComponents.walls);
+
+    // === 门 ===
+    const doorGeometry = new THREE.BoxGeometry(1.5, 2.5, 0.2);
+    const woodTexture = new THREE.TextureLoader().load('./src/textures/wood.png');  
+    woodTexture.wrapS = woodTexture.wrapT = THREE.RepeatWrapping;
+    woodTexture.repeat.set(1, 1);
+    const doorMaterial = new THREE.MeshStandardMaterial({
+        map: woodTexture,
+        roughness: 0.6,
+        metalness: 0.1,
+    });
+    houseComponents.door = new THREE.Mesh(doorGeometry, doorMaterial);
+    houseComponents.door.position.set(0, 1.25, 3.1);
+    houseComponents.door.castShadow = true;
+    houseGroup.add(houseComponents.door);
+
+    // === 屋顶 ===
+    const roofGeometry = new THREE.ConeGeometry(5, 3, 4);
+    const tileTexture = new THREE.TextureLoader().load('./src/textures/roof_tiles.png'); // 请确保有瓦片纹理
+    tileTexture.wrapS = tileTexture.wrapT = THREE.RepeatWrapping;
+    tileTexture.repeat.set(2, 1);
+    const roofMaterial = new THREE.MeshPhongMaterial({
+        map: tileTexture,
+        shininess: 30,
+        specular: new THREE.Color(0.3, 0.3, 0.3)
+    });
+    houseComponents.roof = new THREE.Mesh(roofGeometry, roofMaterial);
+    houseComponents.roof.position.y = 5.5;
+    houseComponents.roof.rotation.y = Math.PI / 4;
+    houseComponents.roof.castShadow = true;
+    houseGroup.add(houseComponents.roof);
+
+    // === 烟囱 ===
+    const chimneyGeometry = new THREE.BoxGeometry(0.8, 2, 0.8);
+    const chimneyTexture = new THREE.TextureLoader().load('./src/textures/chimney_brick.png'); // 烟囱砖纹
+    chimneyTexture.wrapS = chimneyTexture.wrapT = THREE.RepeatWrapping;
+    chimneyTexture.repeat.set(1, 1);
+    const chimneyMaterial = new THREE.MeshPhongMaterial({
+        map: chimneyTexture,
+        bumpMap: chimneyTexture,
+        bumpScale: 0.1
+    });
+    houseComponents.chimney = new THREE.Mesh(chimneyGeometry, chimneyMaterial);
+    houseComponents.chimney.position.set(1.5, 6, 1.5);
+    houseComponents.chimney.castShadow = true;
+    houseGroup.add(houseComponents.chimney);
+
+    // 添加光源
+            houseComponents.ambientLight = new THREE.AmbientLight(0x404040, 1.5);
+            scene.add(houseComponents.ambientLight);
+
+            houseComponents.directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
+            houseComponents.directionalLight.position.set(15, 20, 10);
+            houseComponents.directionalLight.castShadow = true;
+            houseComponents.directionalLight.shadow.mapSize.width = 2048;
+            houseComponents.directionalLight.shadow.mapSize.height = 2048;
+            scene.add(houseComponents.directionalLight);
+}
+
+
+        // 设置控制面板事件监听器
+        function setupControls() {
+            const controlY = document.getElementById('controlY');
+            const controlZ = document.getElementById('controlZ');
+            const controlColor = document.getElementById('controlColor');
+            const controlRotateX = document.getElementById('controlRotateX');
+            const controlWidth = document.getElementById('controlWidth');
+            const fogNear = document.getElementById('fogNear');
+            const fogFar = document.getElementById('fogFar');
+
+            const controlYValue = document.getElementById('controlYValue');
+            const controlZValue = document.getElementById('controlZValue');
+            const controlRotateXValue = document.getElementById('controlRotateXValue');
+            const controlWidthValue = document.getElementById('controlWidthValue');
+
+            // Y Position
+            controlY.addEventListener('input', (e) => {
+                const value = parseFloat(e.target.value);
+                houseGroup.position.y = value;
+                controlYValue.textContent = value.toFixed(1);
+            });
+
+            // Z Position
+            controlZ.addEventListener('input', (e) => {
+                const value = parseFloat(e.target.value);
+                houseGroup.position.z = value;
+                controlZValue.textContent = value.toFixed(1);
+            });
+
+            // Wall Color
+            controlColor.addEventListener('input', (e) => {
+                const brickTexture = createBrickTexture(e.target.value);
+                brickTexture.repeat.set(2, 1);
+                houseComponents.walls.material.map = brickTexture;
+                houseComponents.walls.material.needsUpdate = true;
+            });
+
+            // X Rotation
+            controlRotateX.addEventListener('input', (e) => {
+                const value = parseFloat(e.target.value);
+                houseGroup.rotation.x = (value * Math.PI) / 180;
+                controlRotateXValue.textContent = value + '°';
+            });
+
+            // Width (Scale X)
+            controlWidth.addEventListener('input', (e) => {
+                 const value = parseFloat(e.target.value);
+                 houseGroup.scale.x = value;
+                 houseGroup.scale.z = value; // Scale z as well to maintain aspect ratio
+                 controlWidthValue.textContent = value.toFixed(1);
+            });
+            
+            // Fog Near
+            fogNear.addEventListener('input', (e) => {
+                const value = parseFloat(e.target.value);
+                if (!isNaN(value)) {
+                    scene.fog.near = value;
+                }
+            });
+
+            // Fog Far
+            fogFar.addEventListener('input', (e) => {
+                const value = parseFloat(e.target.value);
+                if (!isNaN(value)) {
+                    scene.fog.far = value;
+                }
+            });
+        }
+
+        // 初始化
+        initializeHouse();
+        setupControls();
+
+        // 设置相机初始位置
+        camera.position.set(15, 12, 18);
+        camera.lookAt(scene.position);
+
+        // 动画循环
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        // 处理窗口大小变化
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        animate();
+    </script>
+</body>
+</html>
